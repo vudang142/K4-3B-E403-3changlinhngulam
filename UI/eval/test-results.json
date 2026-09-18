@@ -5,7 +5,7 @@
     "expected": "confirmed",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is well within the acceptable 50m threshold, indicating the device was physically near the classroom. The check‑in timestamp of 10:03:12 falls within a reasonable window for a class that likely starts around 10:00, allowing for a few minutes of arrival. The QR token is valid and the device ID matches the student’s registered device, eliminating the possibility of proxy attendance. All signals together provide strong, consistent evidence of physical presence.",
+    "reason": "GPS 12m trong phạm vi",
     "pass": true
   },
   {
@@ -14,7 +14,7 @@
     "expected": "confirmed",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is only 8m from the classroom, well below the 50m threshold for ideal proximity. The QR token is valid and the device ID matches the registered device, indicating no proxy attendance. The check‑in timestamp of 10:04:08 is only a few minutes after the typical class start time, which is within normal variation for late arrivals. All signals together support a consistent and legitimate presence.",
+    "reason": "GPS 8m trong phạm vi",
     "pass": true
   },
   {
@@ -23,25 +23,25 @@
     "expected": "verify",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is only 5m from the classroom, well within the ideal <50m threshold. The QR token is valid and the device ID matches the student’s registered device, eliminating the possibility of proxy attendance. The check‑in timestamp of 10:15:50 aligns with typical class start times (assuming a 10:15 start), so there is no temporal anomaly. All signals are consistent with a physically present student.",
+    "reason": "GPS 5m trong phạm vi",
     "pass": false
   },
   {
     "id": 4,
     "description": "GPS 50m + đúng giờ + normal",
     "expected": "verify",
-    "actual": "verify",
-    "confidence": 70,
-    "reason": "The GPS distance of 50 m is at the upper limit of acceptable proximity, requiring verification. The check‑in timestamp of 10:08:01 is slightly later than a typical class start, adding some uncertainty. However, the QR token is valid and the device ID matches, which supports genuine attendance. Overall, the evidence is not conclusively suspicious but warrants manual review.",
-    "pass": true
+    "actual": "confirmed",
+    "confidence": 95,
+    "reason": "GPS 50m trong phạm vi",
+    "pass": false
   },
   {
     "id": 5,
     "description": "GPS 100m + last minute",
     "expected": "suspicious",
     "actual": "verify",
-    "confidence": 70,
-    "reason": "GPS distance is at the upper limit of the acceptable range (100m), which requires additional verification. The check‑in timestamp is within a reasonable window for a typical class start, the QR token is valid, and the device ID matches, all of which support the student’s presence. However, the borderline GPS reading introduces uncertainty that warrants manual review.",
+    "confidence": 50,
+    "reason": "GPS 100m gần boundary",
     "pass": false
   },
   {
@@ -49,8 +49,8 @@
     "description": "GPS 200m + đúng giờ",
     "expected": "suspicious",
     "actual": "suspicious",
-    "confidence": 90,
-    "reason": "GPS distance 214m far from classroom, QR token invalid, device ID matched but QR invalid strongly indicates suspicious behavior. Check‑in time slightly late but not decisive.",
+    "confidence": 10,
+    "reason": "GPS 214m quá xa, Token không hợp lệ",
     "pass": true
   },
   {
@@ -58,8 +58,8 @@
     "description": "GPS 387m - Anonymous device",
     "expected": "suspicious",
     "actual": "suspicious",
-    "confidence": 95,
-    "reason": "GPS distance of 387m is far beyond the acceptable range (>100m), QR token is invalid, and device ID does not match the registered device—each signal independently indicates suspicious behavior. The check‑in timestamp at 10:23:58 may be late for a typical class start, but it does not mitigate the other strong indicators of non‑presence.",
+    "confidence": 10,
+    "reason": "GPS 387m quá xa, Token không hợp lệ, Device không match",
     "pass": true
   },
   {
@@ -67,8 +67,8 @@
     "description": "GPS 48m + near boundary",
     "expected": "verify",
     "actual": "confirmed",
-    "confidence": 90,
-    "reason": "GPS distance is 48m, which is below the 50m threshold and thus acceptable. The QR token is valid and the device ID matches, indicating no proxy attendance. The check‑in time of 10:06:45 is only about 7 minutes after a typical 10:00 class start, which is within a reasonable late window for a student. All signals together support a consistent presence in the classroom.",
+    "confidence": 95,
+    "reason": "GPS 48m trong phạm vi",
     "pass": false
   },
   {
@@ -77,7 +77,7 @@
     "expected": "verify",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is only 10m, well within the acceptable <50m range. The check‑in timestamp of 09:55:00 is slightly early but still consistent with normal early arrival patterns for a class that likely starts at 10:00. The QR token is valid and the device ID matches the student’s registered device, eliminating any proxy or spoofing concerns. All signals together strongly support that the student was physically present in the classroom.",
+    "reason": "GPS 10m trong phạm vi",
     "pass": false
   },
   {
@@ -86,7 +86,7 @@
     "expected": "confirmed",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is 15m, well within the acceptable <50m range, indicating proximity to the classroom. The check‑in timestamp of 10:00:00 aligns with typical class start times, and the QR token is valid with no expiration issues. Device ID matches the student’s registered device, ruling out proxy attendance. All signals are consistent and support the student’s physical presence.",
+    "reason": "GPS 15m trong phạm vi",
     "pass": true
   },
   {
@@ -94,8 +94,8 @@
     "description": "GPS 30m + very close",
     "expected": "confirmed",
     "actual": "confirmed",
-    "confidence": 90,
-    "reason": "GPS distance is 30m, well within the acceptable <50m range. The check‑in timestamp of 10:02:30 is only a few minutes after a typical 10:00 class start, which is acceptable for normal arrival patterns. The QR token is valid and the device ID matches the student’s registered device, indicating no proxy attendance. All signals together support a consistent, legitimate presence.",
+    "confidence": 95,
+    "reason": "GPS 30m trong phạm vi",
     "pass": true
   },
   {
@@ -103,8 +103,8 @@
     "description": "GPS 70m + outside geofence",
     "expected": "verify",
     "actual": "verify",
-    "confidence": 70,
-    "reason": "GPS distance of 70m falls into the 50-100m range, which is borderline and requires additional verification. The check‑in timestamp of 10:10:00 is within a reasonable window for a class that likely starts around 10:00, and the QR token is valid with the device ID matching the student’s device. All other signals are consistent, but the GPS proximity alone is not conclusive enough for a CONFIRMED verdict.",
+    "confidence": 65,
+    "reason": "GPS 70m gần boundary",
     "pass": true
   },
   {
@@ -112,8 +112,8 @@
     "description": "GPS 150m + token invalid",
     "expected": "suspicious",
     "actual": "suspicious",
-    "confidence": 90,
-    "reason": "GPS distance is 150m, well above the 100m threshold, indicating the device is far from the classroom. QR token is invalid, which is a strong indicator of potential proxy attendance. Device ID matches, but that alone cannot override the other red flags. The check‑in timestamp of 10:11:30 is close to a typical class start time, but the combination of GPS and QR signals outweighs this, leading to a suspicious verdict.",
+    "confidence": 10,
+    "reason": "GPS 150m quá xa, Token không hợp lệ",
     "pass": true
   },
   {
@@ -122,7 +122,7 @@
     "expected": "confirmed",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is well within acceptable range (20m), check‑in time aligns with typical class start (10:14:22 close to 10:15), QR token is valid, and device ID matches the student’s device. All signals corroborate physical presence.",
+    "reason": "GPS 20m trong phạm vi",
     "pass": true
   },
   {
@@ -140,7 +140,7 @@
     "expected": "confirmed",
     "actual": "confirmed",
     "confidence": 95,
-    "reason": "GPS distance is well within acceptable range (11m), check‑in time aligns with typical class start, QR token is valid, and device ID matches the student’s device. All signals are consistent with physical presence.",
+    "reason": "GPS 11m trong phạm vi",
     "pass": true
   },
   {
