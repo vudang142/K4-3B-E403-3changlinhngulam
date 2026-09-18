@@ -1,14 +1,17 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import {
   BadgeCheck,
   Check,
+  Clock3,
   LoaderCircle,
   LocateFixed,
   MapPin,
+  QrCode,
   RotateCcw,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   TriangleAlert,
 } from "lucide-react"
@@ -21,6 +24,7 @@ type LocationReading = {
 }
 
 type LocationStatus = "idle" | "requesting" | "ready" | "error"
+type TokenStatus = "validating" | "valid" | "missing" | "expired" | "invalid"
 
 const locationPresets = [
   { label: "Trong lớp", detail: "12m", distance: 12 },
@@ -127,7 +131,72 @@ function StudentIdentity({ fullName, studentId }: { fullName: string; studentId:
   )
 }
 
-export function StudentCheckInScreen() {
+function TokenStatusCard({
+  status,
+  secondsLeft,
+  demoMode,
+}: {
+  status: TokenStatus
+  secondsLeft: number
+  demoMode: boolean
+}) {
+  const minutes = Math.floor(secondsLeft / 60)
+  const seconds = secondsLeft % 60
+
+  if (status === "validating") {
+    return (
+      <div className="mb-5 flex items-center gap-3 rounded-xl border px-4 py-3" style={{ background: "rgba(79,70,229,0.08)", borderColor: "rgba(129,140,248,0.3)" }} aria-live="polite">
+        <LoaderCircle className="shrink-0 animate-spin" size={19} style={{ color: "var(--pa-accent-soft)" }} aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold">Đang xác minh mã QR...</p>
+          <p className="mt-0.5 text-xs" style={{ color: "var(--pa-muted)" }}>Kiểm tra chữ ký và thời hạn phiên điểm danh.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === "valid") {
+    return (
+      <div className="mb-5 flex items-center gap-3 rounded-xl border px-4 py-3" style={{ background: "rgba(52,211,153,0.07)", borderColor: "rgba(52,211,153,0.28)" }} aria-live="polite">
+        <ShieldCheck className="shrink-0" size={20} style={{ color: "var(--pa-emerald)" }} aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold" style={{ color: "var(--pa-emerald)" }}>QR hợp lệ · Phiên điểm danh đã mở</p>
+          <p className="mt-0.5 text-xs" style={{ color: "var(--pa-muted)" }}>
+            {demoMode ? "Chế độ demo an toàn" : "Đã xác minh QR động"} · còn {minutes}:{seconds.toString().padStart(2, "0")}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const expired = status === "expired"
+  const missing = status === "missing"
+  const StatusIcon = expired ? Clock3 : missing ? QrCode : ShieldAlert
+  const title = expired ? "Phiên điểm danh đã hết hạn" : missing ? "Chưa có mã QR điểm danh" : "Mã QR không hợp lệ"
+  const description = expired
+    ? "Vui lòng quét mã QR mới nhất trên màn hình lớp học."
+    : missing
+      ? "Hãy quét Dynamic QR của lớp để mở đúng phiên điểm danh."
+      : "Không thể xác minh chữ ký của mã QR. Vui lòng quét lại mã mới."
+
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-xl border px-4 py-3" style={{ background: expired ? "rgba(251,191,36,0.07)" : "rgba(251,113,133,0.07)", borderColor: expired ? "rgba(251,191,36,0.28)" : "rgba(251,113,133,0.28)" }} role="alert">
+      <StatusIcon className="mt-0.5 shrink-0" size={20} style={{ color: expired ? "var(--pa-amber)" : "var(--pa-rose)" }} aria-hidden="true" />
+      <div>
+        <p className="text-sm font-semibold" style={{ color: expired ? "var(--pa-amber)" : "var(--pa-rose)" }}>{title}</p>
+        <p className="mt-1 text-xs leading-5" style={{ color: "var(--pa-muted)" }}>{description}</p>
+      </div>
+    </div>
+  )
+}
+
+export function StudentCheckInScreen({
+  qrToken = null,
+  demoMode = false,
+}: {
+  qrToken?: string | null
+  demoMode?: boolean
+}) {
   const [fullName, setFullName] = useState("")
   const [studentId, setStudentId] = useState("")
   const [location, setLocation] = useState<LocationReading | null>(null)
@@ -136,8 +205,84 @@ export function StudentCheckInScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [requestError, setRequestError] = useState("")
   const [result, setResult] = useState<VerificationResult | null>(null)
+  const [checkInToken, setCheckInToken] = useState("")
+  const [tokenStatus, setTokenStatus] = useState<TokenStatus>("validating")
+  const [tokenExpiresAt, setTokenExpiresAt] = useState(0)
+  const [tokenSecondsLeft, setTokenSecondsLeft] = useState(0)
 
-  const canSubmit = Boolean(fullName.trim() && studentId.trim() && location) && !isSubmitting
+  const canSubmit =
+    Boolean(fullName.trim() && studentId.trim() && location && checkInToken) &&
+    tokenStatus === "valid" &&
+    !isSubmitting
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function exchangeQrToken() {
+      setTokenStatus("validating")
+
+      try {
+        let token = qrToken
+        if (!token && demoMode) {
+          const issueResponse = await fetch("/api/attendance/token", { cache: "no-store" })
+          if (!issueResponse.ok) throw new Error("Could not create demo token")
+          const issued = (await issueResponse.json()) as { token: string }
+          token = issued.token
+        }
+
+        if (!token) {
+          if (!cancelled) setTokenStatus("missing")
+          return
+        }
+
+        const response = await fetch("/api/attendance/token/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        })
+        const data = (await response.json()) as {
+          valid: boolean
+          reason?: string
+          checkInToken?: string
+          expiresAt?: number
+        }
+
+        if (cancelled) return
+        if (!response.ok || !data.valid || !data.checkInToken || !data.expiresAt) {
+          setTokenStatus(data.reason === "expired" ? "expired" : "invalid")
+          return
+        }
+
+        setCheckInToken(data.checkInToken)
+        setTokenExpiresAt(data.expiresAt)
+        setTokenSecondsLeft(Math.max(0, Math.ceil((data.expiresAt - Date.now()) / 1000)))
+        setTokenStatus("valid")
+      } catch {
+        if (!cancelled) setTokenStatus("invalid")
+      }
+    }
+
+    void exchangeQrToken()
+    return () => {
+      cancelled = true
+    }
+  }, [demoMode, qrToken])
+
+  useEffect(() => {
+    if (tokenStatus !== "valid" || !tokenExpiresAt) return
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((tokenExpiresAt - Date.now()) / 1000))
+      setTokenSecondsLeft(remaining)
+      if (remaining === 0) {
+        setCheckInToken("")
+        setTokenStatus("expired")
+      }
+    }
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [tokenExpiresAt, tokenStatus])
 
   function requestLocation() {
     setLocationError("")
@@ -197,7 +342,7 @@ export function StudentCheckInScreen() {
           gps: location.distance,
           time,
           deviceMatched: true,
-          tokenValid: true,
+          token: checkInToken,
         }),
       })
 
@@ -330,6 +475,8 @@ export function StudentCheckInScreen() {
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
           }}
         >
+          <TokenStatusCard status={tokenStatus} secondsLeft={tokenSecondsLeft} demoMode={demoMode} />
+
           <div className="space-y-5">
             <div>
               <label htmlFor="student-name" className="mb-2 block text-sm font-semibold">

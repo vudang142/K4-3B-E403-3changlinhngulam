@@ -19,7 +19,7 @@ export default function Page() {
       {screen === "login" ? (
         <LoginScreen />
       ) : screen === "checkin" ? (
-        <StudentCheckInScreen />
+        <StudentCheckInScreen demoMode />
       ) : (
         <div className="flex">
           <IconSidebar active={screen === "qr" ? 1 : screen === "verify" ? 2 : 0} />

@@ -2,7 +2,14 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { StudentCheckInScreen } from "@/components/presence/student-check-in-screen"
 
-export default function CheckInPage() {
+export default async function CheckInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string | string[] }>
+}) {
+  const params = await searchParams
+  const qrToken = typeof params.token === "string" ? params.token : null
+
   return (
     <main className="min-h-screen" style={{ background: "var(--pa-bg)" }}>
       <nav
@@ -26,7 +33,7 @@ export default function CheckInPage() {
           <span className="sm:hidden">Quay lại</span>
         </Link>
       </nav>
-      <StudentCheckInScreen />
+      <StudentCheckInScreen qrToken={qrToken} />
     </main>
   )
 }

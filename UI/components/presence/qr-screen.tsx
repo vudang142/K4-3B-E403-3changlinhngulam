@@ -1,8 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react"
 import type { ScreenId } from "./top-nav"
 import { QrCode } from "./qr-code"
+
+type QrTokenData = {
+  token: string
+  expiresAt: number
+  checkInUrl: string
+  sessionId: string
+}
 
 function FieldValue({ label, value }: { label: string; value: string }) {
   return (
@@ -39,21 +47,51 @@ function SecurityBox({ value, label }: { value: string; label: string }) {
 export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void }) {
   const [active, setActive] = useState(false)
   const [countdown, setCountdown] = useState(45)
-  const [seed, setSeed] = useState(1)
+  const [qrData, setQrData] = useState<QrTokenData | null>(null)
+  const [isLoadingQr, setIsLoadingQr] = useState(false)
+  const [qrError, setQrError] = useState("")
+
+  const fetchQrToken = useCallback(async () => {
+    setIsLoadingQr(true)
+    setQrError("")
+
+    try {
+      const response = await fetch("/api/attendance/token", { cache: "no-store" })
+      if (!response.ok) throw new Error("Could not create QR token")
+
+      const data = (await response.json()) as QrTokenData
+      setQrData(data)
+      setCountdown(Math.max(0, Math.ceil((data.expiresAt - Date.now()) / 1000)))
+    } catch {
+      setQrError("Không thể tạo mã QR. Vui lòng kiểm tra cấu hình token và thử lại.")
+    } finally {
+      setIsLoadingQr(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!active) return
-    const t = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          setSeed((s) => s + 1)
-          return 45
-        }
-        return c - 1
-      })
-    }, 1000)
-    return () => clearInterval(t)
-  }, [active])
+    if (!active || !qrData) return
+
+    const updateCountdown = () => {
+      setCountdown(Math.max(0, Math.ceil((qrData.expiresAt - Date.now()) / 1000)))
+    }
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [active, qrData])
+
+  useEffect(() => {
+    if (!active || !qrData) return
+
+    const refreshDelay = Math.max(0, qrData.expiresAt - Date.now())
+    const timeout = setTimeout(() => void fetchQrToken(), refreshDelay)
+    return () => clearTimeout(timeout)
+  }, [active, fetchQrToken, qrData])
+
+  async function startSession() {
+    setActive(true)
+    await fetchQrToken()
+  }
 
   return (
     <div>
@@ -71,7 +109,7 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
         <div className="flex items-center gap-2 font-mono-pa text-[12px] tracking-[0.15em]">
           <span
             className="h-2 w-2 rounded-full"
-            style={{ background: active ? "var(--pa-emerald)" : "var(--pa-emerald)" }}
+            style={{ background: active ? "var(--pa-emerald)" : "var(--pa-dim)" }}
           />
           {active ? "ATTENDANCE ACTIVE" : "STANDBY"}
         </div>
@@ -111,11 +149,13 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
 
           {!active ? (
             <button
-              onClick={() => setActive(true)}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white transition-colors"
+              onClick={startSession}
+              disabled={isLoadingQr}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-indigo-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 disabled:pointer-events-none disabled:opacity-50"
               style={{ background: "var(--pa-accent)" }}
             >
-              <span aria-hidden>▦</span> Generate Dynamic QR
+              {isLoadingQr ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <span aria-hidden>▦</span>}
+              {isLoadingQr ? "Generating secure QR..." : "Generate Dynamic QR"}
             </button>
           ) : (
             <>
@@ -124,6 +164,8 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
                   onClick={() => {
                     setActive(false)
                     setCountdown(45)
+                    setQrData(null)
+                    setQrError("")
                   }}
                   className="rounded-lg px-4 py-2.5 text-sm font-medium"
                   style={{ background: "var(--pa-field)", border: "1px solid var(--pa-border)" }}
@@ -182,37 +224,72 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
             </>
           ) : (
             <>
-              <div className="relative flex items-center justify-center">
+              {qrError ? (
                 <div
-                  className="absolute inset-0 -m-4 rounded-full"
-                  style={{ border: "2px solid var(--pa-accent)", opacity: 0.5 }}
-                />
-                <QrCode seed={seed} />
-              </div>
-
-              <div className="mt-8 flex items-center gap-4">
-                <div
-                  className="flex h-14 w-14 items-center justify-center rounded-full font-mono-pa text-lg"
-                  style={{ border: "2px solid var(--pa-accent)", color: "var(--pa-accent-soft)" }}
+                  className="flex w-full max-w-sm flex-col items-center rounded-xl border p-6 text-center"
+                  style={{ background: "rgba(251,113,133,0.06)", borderColor: "rgba(251,113,133,0.25)" }}
+                  role="alert"
                 >
-                  {countdown}
+                  <p className="text-sm leading-6" style={{ color: "var(--pa-rose)" }}>{qrError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchQrToken()}
+                    className="mt-4 flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-150 hover:bg-white/[0.04] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60"
+                    style={{ borderColor: "var(--pa-border)" }}
+                  >
+                    <RefreshCw size={15} aria-hidden="true" /> Thử lại
+                  </button>
                 </div>
-                <div>
-                  <div className="font-mono-pa text-sm">QR rotates in {countdown}s</div>
-                  <div className="text-xs" style={{ color: "var(--pa-muted)" }}>
-                    New code auto-generated for security
+              ) : qrData ? (
+                <>
+                  <div className="relative flex items-center justify-center">
+                    <div
+                      className="absolute inset-0 -m-4 rounded-full"
+                      style={{ border: "2px solid var(--pa-accent)", opacity: 0.5 }}
+                    />
+                    <QrCode value={qrData.checkInUrl} />
                   </div>
-                </div>
-              </div>
 
-              <div
-                className="mt-6 flex items-center gap-3 rounded-lg px-4 py-2.5 font-mono-pa text-[12px] tracking-[0.1em]"
-                style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)" }}
-              >
-                <span className="h-2 w-2 rounded-full" style={{ background: "var(--pa-emerald)" }} />
-                <span style={{ color: "var(--pa-emerald)" }}>ATTENDANCE ACTIVE</span>
-                <span style={{ color: "var(--pa-muted)" }}>18/35 checked in</span>
-              </div>
+                  <div className="mt-8 flex items-center gap-4">
+                    <div
+                      className="flex h-14 w-14 items-center justify-center rounded-full font-mono-pa text-lg"
+                      style={{ border: "2px solid var(--pa-accent)", color: "var(--pa-accent-soft)" }}
+                    >
+                      {isLoadingQr ? <LoaderCircle className="animate-spin" size={20} aria-hidden="true" /> : countdown}
+                    </div>
+                    <div>
+                      <div className="font-mono-pa text-sm">QR rotates in {countdown}s</div>
+                      <div className="text-xs" style={{ color: "var(--pa-muted)" }}>
+                        Signed code auto-refreshes every 45 seconds
+                      </div>
+                    </div>
+                  </div>
+
+                  <a
+                    href={qrData.checkInUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 flex max-w-[280px] items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60"
+                    style={{ color: "var(--pa-accent-soft)" }}
+                  >
+                    <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">Open student check-in link</span>
+                  </a>
+
+                  <div
+                    className="mt-4 flex items-center gap-3 rounded-lg px-4 py-2.5 font-mono-pa text-[12px] tracking-[0.1em]"
+                    style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)" }}
+                  >
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: "var(--pa-emerald)" }} />
+                    </span>
+                    <span style={{ color: "var(--pa-emerald)" }}>SCANNABLE QR ACTIVE</span>
+                  </div>
+                </>
+              ) : (
+                <LoaderCircle className="animate-spin" size={28} style={{ color: "var(--pa-accent-soft)" }} aria-label="Generating QR" />
+              )}
             </>
           )}
         </div>
