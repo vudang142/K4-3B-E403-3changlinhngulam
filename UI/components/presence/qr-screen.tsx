@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import type { ScreenId } from "./top-nav"
 import { QrCode } from "./qr-code"
+import { createSession, getSessionAttendance, type SessionResponse } from "@/lib/api"
 
 function FieldValue({ label, value }: { label: string; value: string }) {
   return (
@@ -39,21 +40,85 @@ function SecurityBox({ value, label }: { value: string; label: string }) {
 export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void }) {
   const [active, setActive] = useState(false)
   const [countdown, setCountdown] = useState(45)
-  const [seed, setSeed] = useState(1)
+  const [session, setSession] = useState<SessionResponse | null>(null)
+  const [checkinCount, setCheckinCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
+  // Poll attendance count when session is active
+  useEffect(() => {
+    if (!active || !session) return
+
+    const pollAttendance = async () => {
+      try {
+        const data = await getSessionAttendance(session.session_id)
+        setCheckinCount(data.attendance.length)
+      } catch (e) {
+        console.error("Failed to poll attendance:", e)
+      }
+    }
+
+    pollAttendance()
+    const interval = setInterval(pollAttendance, 5000)
+    return () => clearInterval(interval)
+  }, [active, session])
+
+  // Countdown timer (for display, not QR rotation)
   useEffect(() => {
     if (!active) return
     const t = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          setSeed((s) => s + 1)
-          return 45
-        }
-        return c - 1
-      })
+      setCountdown((c) => Math.max(0, c - 1))
     }, 1000)
     return () => clearInterval(t)
   }, [active])
+
+  // Update countdown display from session expiry
+  useEffect(() => {
+    if (!active || !session) return
+
+    const expiresAt = new Date(session.expires_at).getTime()
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+      setCountdown(remaining)
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [active, session])
+
+  // Generate session from backend
+  const handleGenerateQR = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const newSession = await createSession("class-001", "E403", 30)
+      setSession(newSession)
+      setActive(true)
+    } catch (e) {
+      setError("Failed to create session. Is backend running?")
+      console.error(e)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleReset = () => {
+    setActive(false)
+    setSession(null)
+    setCheckinCount(0)
+    setCountdown(45)
+  }
+
+  const handleEndSession = async () => {
+    if (!session) return
+    try {
+      await fetch(`http://localhost:8000/api/sessions/${session.session_id}/end`, { method: "POST" })
+    } catch (e) {
+      console.error("Failed to end session:", e)
+    }
+    handleReset()
+  }
 
   return (
     <div>
@@ -109,22 +174,26 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
             </div>
           </div>
 
+          {error && (
+            <div className="mt-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-500">
+              {error}
+            </div>
+          )}
+
           {!active ? (
             <button
-              onClick={() => setActive(true)}
+              onClick={handleGenerateQR}
+              disabled={isLoading}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white transition-colors"
-              style={{ background: "var(--pa-accent)" }}
+              style={{ background: isLoading ? "var(--pa-muted)" : "var(--pa-accent)" }}
             >
-              <span aria-hidden>▦</span> Generate Dynamic QR
+              {isLoading ? "Creating Session..." : <><span aria-hidden>▦</span> Generate Dynamic QR</>}
             </button>
           ) : (
             <>
               <div className="mt-6 flex items-center justify-between">
                 <button
-                  onClick={() => {
-                    setActive(false)
-                    setCountdown(45)
-                  }}
+                  onClick={handleReset}
                   className="rounded-lg px-4 py-2.5 text-sm font-medium"
                   style={{ background: "var(--pa-field)", border: "1px solid var(--pa-border)" }}
                 >
@@ -147,16 +216,16 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
                   LIVE CHECK-INS
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-5xl font-bold">18</span>
+                  <span className="text-5xl font-bold">{checkinCount}</span>
                   <span className="text-2xl" style={{ color: "var(--pa-muted)" }}>
                     / 35
                   </span>
                 </div>
                 <div className="mt-4 h-2 w-full overflow-hidden rounded-full" style={{ background: "var(--pa-field)" }}>
-                  <div className="h-full rounded-full" style={{ width: "51%", background: "var(--pa-accent)" }} />
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, (checkinCount / 35) * 100)}%`, background: "var(--pa-accent)" }} />
                 </div>
                 <div className="mt-2 text-xs" style={{ color: "var(--pa-muted)" }}>
-                  51% of class checked in
+                  {Math.round((checkinCount / 35) * 100)}% of class checked in
                 </div>
               </div>
             </>
@@ -183,11 +252,8 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
           ) : (
             <>
               <div className="relative flex items-center justify-center">
-                <div
-                  className="absolute inset-0 -m-4 rounded-full"
-                  style={{ border: "2px solid var(--pa-accent)", opacity: 0.5 }}
-                />
-                <QrCode seed={seed} />
+                {/* QR code thật với URL từ backend */}
+                <QrCode url={session.qr_url} />
               </div>
 
               <div className="mt-8 flex items-center gap-4">
@@ -211,7 +277,7 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
               >
                 <span className="h-2 w-2 rounded-full" style={{ background: "var(--pa-emerald)" }} />
                 <span style={{ color: "var(--pa-emerald)" }}>ATTENDANCE ACTIVE</span>
-                <span style={{ color: "var(--pa-muted)" }}>18/35 checked in</span>
+                <span style={{ color: "var(--pa-muted)" }}>{checkinCount}/35 checked in</span>
               </div>
             </>
           )}

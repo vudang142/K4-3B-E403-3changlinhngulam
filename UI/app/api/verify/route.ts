@@ -3,10 +3,15 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { verifyPresence, VerificationInput } from "@/lib/ai-service"
+import { verifyAttendanceToken } from "@/lib/attendance-token"
+
+type VerificationRequest = Omit<VerificationInput, "tokenValid"> & {
+  token?: unknown
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const body: VerificationInput = await req.json()
+    const body = (await req.json()) as VerificationRequest
 
     // Validate input
     if (typeof body.gps !== "number" || body.gps < 0) {
@@ -23,8 +28,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await verifyPresence(body)
-    return NextResponse.json(result)
+    const tokenValidation =
+      typeof body.token === "string"
+        ? verifyAttendanceToken(body.token, "check-in")
+        : { valid: false as const, reason: "invalid" as const }
+    const input: VerificationInput = {
+      gps: body.gps,
+      time: body.time,
+      deviceMatched: body.deviceMatched === true,
+      tokenValid: tokenValidation.valid,
+    }
+
+    const result = await verifyPresence(input)
+    return NextResponse.json({ ...result, tokenValid: tokenValidation.valid })
   } catch (error) {
     console.error("AI verification API error:", error)
     return NextResponse.json(
