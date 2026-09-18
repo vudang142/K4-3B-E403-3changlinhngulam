@@ -7,6 +7,7 @@ import { LoginScreen } from "@/components/presence/login-screen"
 import { QrScreen } from "@/components/presence/qr-screen"
 import { VerificationScreen } from "@/components/presence/verification-screen"
 import { AttendanceScreen } from "@/components/presence/attendance-screen"
+import { StudentCheckInScreen } from "@/components/presence/student-check-in-screen"
 
 export default function Page() {
   const [screen, setScreen] = useState<ScreenId>("login")
@@ -17,6 +18,8 @@ export default function Page() {
 
       {screen === "login" ? (
         <LoginScreen />
+      ) : screen === "checkin" ? (
+        <StudentCheckInScreen demoMode />
       ) : (
         <div className="flex">
           <IconSidebar active={screen === "qr" ? 1 : screen === "verify" ? 2 : 0} />

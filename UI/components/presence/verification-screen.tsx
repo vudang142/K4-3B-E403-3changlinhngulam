@@ -153,8 +153,10 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
   }, [])
 
   // Gọi AI để verify một student
-  async function verifyWithAI(entry: StreamEntry) {
+  async function verifyWithAI(entry: StreamEntry, token: string) {
     try {
+      if (!token) throw new Error("Missing signed attendance token")
+
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -162,7 +164,7 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
           time: entry.time,
           gps: entry.gps,
           deviceMatched: true,
-          tokenValid: true
+          token,
         })
       })
       const data = await res.json()
@@ -189,9 +191,26 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
     setIsLoadingAI(true)
     setShowAIResults(false)
     const results: Record<string, { verdict: Verdict; confidence: number; reason: string }> = {}
+    let checkInToken = ""
+
+    try {
+      const issueResponse = await fetch("/api/attendance/token", { cache: "no-store" })
+      if (!issueResponse.ok) throw new Error("Could not issue QR token")
+      const issued = (await issueResponse.json()) as { token: string }
+      const exchangeResponse = await fetch("/api/attendance/token/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: issued.token }),
+      })
+      if (!exchangeResponse.ok) throw new Error("Could not exchange QR token")
+      const exchanged = (await exchangeResponse.json()) as { checkInToken: string }
+      checkInToken = exchanged.checkInToken
+    } catch (error) {
+      console.error("Could not prepare signed attendance token:", error)
+    }
 
     for (const entry of verificationStream) {
-      results[entry.name] = await verifyWithAI(entry)
+      results[entry.name] = await verifyWithAI(entry, checkInToken)
       // Update state để hiển thị từng kết quả
       setAiResults({ ...results })
     }
