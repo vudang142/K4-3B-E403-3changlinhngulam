@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "description": "GPS đúng lớp + đúng giờ + normal",
+    "input": { "time": "10:03:12", "gps": 12, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 2,
+    "description": "GPS đúng lớp + đúng giờ + normal",
+    "input": { "time": "10:04:08", "gps": 8, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 3,
+    "description": "GPS đúng lớp + last minute",
+    "input": { "time": "10:15:50", "gps": 5, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 4,
+    "description": "GPS 50m + đúng giờ + normal",
+    "input": { "time": "10:08:01", "gps": 50, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 5,
+    "description": "GPS 100m + last minute",
+    "input": { "time": "10:21:15", "gps": 100, "deviceMatched": true, "tokenValid": true },
+    "expected": "suspicious"
+  },
+  {
+    "id": 6,
+    "description": "GPS 200m + đúng giờ",
+    "input": { "time": "10:07:22", "gps": 214, "deviceMatched": true, "tokenValid": false },
+    "expected": "suspicious"
+  },
+  {
+    "id": 7,
+    "description": "GPS 387m - Anonymous device",
+    "input": { "time": "10:23:58", "gps": 387, "deviceMatched": false, "tokenValid": false },
+    "expected": "suspicious"
+  },
+  {
+    "id": 8,
+    "description": "GPS 48m + near boundary",
+    "input": { "time": "10:06:45", "gps": 48, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 9,
+    "description": "GPS đúng + early check-in",
+    "input": { "time": "09:55:00", "gps": 10, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 10,
+    "description": "GPS đúng + normal + normal time",
+    "input": { "time": "10:00:00", "gps": 15, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 11,
+    "description": "GPS 30m + very close",
+    "input": { "time": "10:02:30", "gps": 30, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 12,
+    "description": "GPS 70m + outside geofence",
+    "input": { "time": "10:10:00", "gps": 70, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 13,
+    "description": "GPS 150m + token invalid",
+    "input": { "time": "10:11:30", "gps": 150, "deviceMatched": true, "tokenValid": false },
+    "expected": "suspicious"
+  },
+  {
+    "id": 14,
+    "description": "GPS 20m + device matched",
+    "input": { "time": "10:14:22", "gps": 20, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 15,
+    "description": "GPS 52m + borderline",
+    "input": { "time": "10:16:33", "gps": 52, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  },
+  {
+    "id": 16,
+    "description": "GPS 11m + perfect score",
+    "input": { "time": "10:19:07", "gps": 11, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 17,
+    "description": "GPS 19m + slightly late",
+    "input": { "time": "10:20:29", "gps": 19, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 18,
+    "description": "GPS 26m + normal",
+    "input": { "time": "10:17:01", "gps": 26, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 19,
+    "description": "GPS 33m + near late",
+    "input": { "time": "10:18:14", "gps": 33, "deviceMatched": true, "tokenValid": true },
+    "expected": "confirmed"
+  },
+  {
+    "id": 20,
+    "description": "GPS 41m + verify zone",
+    "input": { "time": "10:22:40", "gps": 41, "deviceMatched": true, "tokenValid": true },
+    "expected": "verify"
+  }
+]

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import type { ScreenId } from "./top-nav"
 import { verificationStream, verdictMeta, type StreamEntry } from "@/lib/presence-data"
+import type { Verdict } from "@/lib/ai-service"
 
 function StageBadge({ done, index }: { done: boolean; index: number }) {
   return (
@@ -50,16 +51,20 @@ function ConfidenceBar({ value, verdict }: { value: number; verdict: StreamEntry
   )
 }
 
-function StreamRow({ entry }: { entry: StreamEntry }) {
-  const meta = verdictMeta[entry.verdict]
+function StreamRow({ entry, aiResult }: { entry: StreamEntry; aiResult?: { verdict: Verdict; confidence: number; reason: string } }) {
+  const hasAIResult = !!aiResult
+
   return (
     <div
       className="flex items-center gap-4 rounded-xl px-4 py-3"
       style={{
         background: "var(--pa-panel)",
-        border: `1px solid ${entry.verdict === "confirmed" ? "var(--pa-border)" : meta.border}`,
+        border: `2px solid ${hasAIResult ? "var(--pa-accent)" : "var(--pa-border)"}`,
       }}
     >
+      {hasAIResult && (
+        <span className="text-xs" style={{ color: "var(--pa-accent)" }}>✨</span>
+      )}
       <div
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono-pa text-xs"
         style={{ background: "var(--pa-field)", border: "1px solid var(--pa-border)" }}
@@ -72,29 +77,59 @@ function StreamRow({ entry }: { entry: StreamEntry }) {
           {entry.time}
         </div>
       </div>
-      <div className="ml-auto flex items-center gap-2">
-        <span className="text-[11px]" style={{ color: "var(--pa-muted)" }}>
-          AI Confidence
-        </span>
-        <ConfidenceBar value={entry.confidence} verdict={entry.verdict} />
-      </div>
-      <div className="hidden items-center gap-1.5 font-mono-pa text-[11px] md:flex">
-        {["QR", "Time", `GPS ${entry.gps}m`].map((t) => (
+
+      {hasAIResult ? (
+        <>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: "var(--pa-muted)" }}>
+              AI Confidence
+            </span>
+            <ConfidenceBar value={aiResult!.confidence} verdict={aiResult!.verdict} />
+          </div>
+          <div className="hidden items-center gap-1.5 font-mono-pa text-[11px] md:flex">
+            {["QR", "Time", `GPS ${entry.gps}m`].map((t) => (
+              <span
+                key={t}
+                className="rounded px-2 py-1"
+                style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
           <span
-            key={t}
-            className="rounded px-2 py-1"
-            style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
+            className="whitespace-nowrap rounded-md px-2.5 py-1 font-mono-pa text-[11px] font-semibold tracking-wide"
+            style={{ background: verdictMeta[aiResult!.verdict].bg, color: verdictMeta[aiResult!.verdict].color, border: `1px solid ${verdictMeta[aiResult!.verdict].border}` }}
           >
-            {t}
+            {verdictMeta[aiResult!.verdict].glyph} {verdictMeta[aiResult!.verdict].label}
           </span>
-        ))}
-      </div>
-      <span
-        className="whitespace-nowrap rounded-md px-2.5 py-1 font-mono-pa text-[11px] font-semibold tracking-wide"
-        style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.border}` }}
-      >
-        {meta.glyph} {meta.label}
-      </span>
+        </>
+      ) : (
+        <>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: "var(--pa-muted)" }}>
+              Evidence collected
+            </span>
+          </div>
+          <div className="hidden items-center gap-1.5 font-mono-pa text-[11px] md:flex">
+            {["QR", "Time", `GPS ${entry.gps}m`].map((t) => (
+              <span
+                key={t}
+                className="rounded px-2 py-1"
+                style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+          <span
+            className="whitespace-nowrap rounded-md px-2.5 py-1 font-mono-pa text-[11px] font-semibold tracking-wide"
+            style={{ background: "var(--pa-field)", color: "var(--pa-muted)", border: "1px solid var(--pa-border)" }}
+          >
+            ⏳ Pending
+          </span>
+        </>
+      )}
     </div>
   )
 }
@@ -102,6 +137,9 @@ function StreamRow({ entry }: { entry: StreamEntry }) {
 export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void }) {
   const [evidenceDone, setEvidenceDone] = useState(false)
   const [processed, setProcessed] = useState(0)
+  const [aiResults, setAiResults] = useState<Record<string, { verdict: Verdict; confidence: number; reason: string }>>({})
+  const [isLoadingAI, setIsLoadingAI] = useState(false)
+  const [showAIResults, setShowAIResults] = useState(false)
 
   useEffect(() => {
     const t1 = setTimeout(() => setEvidenceDone(true), 2600)
@@ -113,6 +151,54 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
       timers.forEach(clearTimeout)
     }
   }, [])
+
+  // Gọi AI để verify một student
+  async function verifyWithAI(entry: StreamEntry) {
+    try {
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          time: entry.time,
+          gps: entry.gps,
+          deviceMatched: true,
+          tokenValid: true
+        })
+      })
+      const data = await res.json()
+      return {
+        verdict: data.verdict as Verdict,
+        confidence: data.confidence,
+        reason: data.reason || ""
+      }
+    } catch (error) {
+      console.error("AI verification failed:", error)
+      // Fallback to mock calculation instead of using entry's mock verdict
+      const fallbackConfidence = entry.gps < 50 ? 95 : entry.gps < 100 ? 65 : 20
+      const fallbackVerdict = entry.gps < 50 ? "confirmed" : entry.gps < 100 ? "verify" : "suspicious"
+      return {
+        verdict: fallbackVerdict as Verdict,
+        confidence: fallbackConfidence,
+        reason: "Fallback (API unavailable)"
+      }
+    }
+  }
+
+  // Gọi AI cho tất cả students
+  async function runAIVerification() {
+    setIsLoadingAI(true)
+    setShowAIResults(false)
+    const results: Record<string, { verdict: Verdict; confidence: number; reason: string }> = {}
+
+    for (const entry of verificationStream) {
+      results[entry.name] = await verifyWithAI(entry)
+      // Update state để hiển thị từng kết quả
+      setAiResults({ ...results })
+    }
+
+    setIsLoadingAI(false)
+    setShowAIResults(true)
+  }
 
   const evidenceItems = [
     { label: "Timestamp", value: "±8s" },
@@ -133,13 +219,27 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
             Automatic evidence collection and AI presence evaluation
           </p>
         </div>
-        <button
-          onClick={() => onNavigate("attendance")}
-          className="rounded-lg px-4 py-2.5 text-sm font-medium text-white"
-          style={{ background: "var(--pa-accent)" }}
-        >
-          Live Attendance →
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={runAIVerification}
+            disabled={isLoadingAI || !evidenceDone}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium"
+            style={{
+              background: isLoadingAI ? "var(--pa-muted)" : "var(--pa-accent)",
+              color: "white",
+              opacity: (!evidenceDone) ? 0.5 : 1
+            }}
+          >
+            {isLoadingAI ? "AI Processing..." : "🚀 Run AI Verification"}
+          </button>
+          <button
+            onClick={() => onNavigate("attendance")}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-white"
+            style={{ background: "var(--pa-accent)" }}
+          >
+            Live Attendance →
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 p-8 lg:grid-cols-[320px_1fr]">
@@ -251,7 +351,7 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
         {/* stream column */}
         <div>
           <div className="font-mono-pa mb-3 text-[12px] tracking-[0.15em]" style={{ color: "var(--pa-muted)" }}>
-            LIVE VERIFICATION STREAM — {processed} PROCESSED
+            {showAIResults ? "AI VERIFICATION RESULTS" : "LIVE VERIFICATION STREAM"} — {processed} PROCESSED
           </div>
           {processed === 0 ? (
             <div
@@ -261,10 +361,16 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
               <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--pa-accent-soft)" }} />
               Awaiting scans…
             </div>
-          ) : (
+          ) : !showAIResults ? (
             <div className="flex flex-col gap-3">
               {verificationStream.slice(0, processed).map((e) => (
                 <StreamRow key={e.name} entry={e} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {verificationStream.slice(0, processed).map((e) => (
+                <StreamRow key={e.name} entry={e} aiResult={aiResults[e.name]} />
               ))}
             </div>
           )}
