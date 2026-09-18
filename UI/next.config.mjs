@@ -6,6 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  allowedDevOrigins: ['diego-php-tour-motorcycle.trycloudflare.com'],
 }
 
 export default nextConfig

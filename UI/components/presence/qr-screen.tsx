@@ -95,6 +95,8 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
       const newSession = await createSession("class-001", "E403", 30)
       setSession(newSession)
       setActive(true)
+      // Save session ID for verification screen
+      localStorage.setItem("active_session_id", newSession.session_id)
     } catch (e) {
       setError("Failed to create session. Is backend running?")
       console.error(e)
@@ -108,12 +110,14 @@ export function QrScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void })
     setSession(null)
     setCheckinCount(0)
     setCountdown(45)
+    localStorage.removeItem("active_session_id")
   }
 
   const handleEndSession = async () => {
     if (!session) return
     try {
-      await fetch(`http://localhost:8000/api/sessions/${session.session_id}/end`, { method: "POST" })
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+      await fetch(`${apiBase}/api/sessions/${session.session_id}/end`, { method: "POST" })
     } catch (e) {
       console.error("Failed to end session:", e)
     }

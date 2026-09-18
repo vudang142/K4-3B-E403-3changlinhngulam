@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import type { ScreenId } from "./top-nav"
-import { verificationStream, verdictMeta, type StreamEntry } from "@/lib/presence-data"
-import type { Verdict } from "@/lib/ai-service"
+import { getSessionAttendance } from "@/lib/api"
+import type { AttendanceListItem } from "@/lib/api"
+
+type Verdict = "CONFIRMED" | "VERIFY" | "SUSPICIOUS"
 
 function StageBadge({ done, index }: { done: boolean; index: number }) {
   return (
@@ -37,90 +39,84 @@ function SubItem({ label, value, done }: { label: string; value: string; done: b
   )
 }
 
-function ConfidenceBar({ value, verdict }: { value: number; verdict: StreamEntry["verdict"] }) {
-  const meta = verdictMeta[verdict]
+function ConfidenceBar({ value }: { value: number }) {
+  const color = value >= 85 ? "var(--pa-emerald)" : value >= 40 ? "var(--pa-amber)" : "var(--pa-rose)"
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-24 overflow-hidden rounded-full" style={{ background: "var(--pa-field)" }}>
-        <div className="h-full rounded-full" style={{ width: `${value}%`, background: meta.color }} />
+        <div className="h-full rounded-full" style={{ width: `${value}%`, background: color }} />
       </div>
-      <span className="font-mono-pa text-xs" style={{ color: meta.color }}>
+      <span className="font-mono-pa text-xs" style={{ color }}>
         {value}%
       </span>
     </div>
   )
 }
 
-function StreamRow({ entry, aiResult }: { entry: StreamEntry; aiResult?: { verdict: Verdict; confidence: number; reason: string } }) {
-  const hasAIResult = !!aiResult
+function getVerdictInfo(status: string) {
+  if (status === "CONFIRMED") {
+    return { glyph: "✓", label: "Confirmed", color: "var(--pa-emerald)", bg: "rgba(52,211,153,0.1)", border: "rgba(52,211,153,0.3)" }
+  } else if (status === "VERIFY") {
+    return { glyph: "⚠", label: "Verify", color: "var(--pa-amber)", bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.3)" }
+  } else {
+    return { glyph: "✗", label: "Suspicious", color: "var(--pa-rose)", bg: "rgba(251,113,133,0.1)", border: "rgba(251,113,133,0.3)" }
+  }
+}
+
+function AttendanceRow({ item }: { item: AttendanceListItem }) {
+  const verdict = getVerdictInfo(item.status)
+  const hasVerdict = item.status !== "PENDING"
 
   return (
     <div
       className="flex items-center gap-4 rounded-xl px-4 py-3"
       style={{
         background: "var(--pa-panel)",
-        border: `2px solid ${hasAIResult ? "var(--pa-accent)" : "var(--pa-border)"}`,
+        border: `2px solid ${hasVerdict ? verdict.border : "var(--pa-border)"}`,
       }}
     >
-      {hasAIResult && (
-        <span className="text-xs" style={{ color: "var(--pa-accent)" }}>✨</span>
-      )}
       <div
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono-pa text-xs"
         style={{ background: "var(--pa-field)", border: "1px solid var(--pa-border)" }}
       >
-        {entry.initials}
+        {item.student_code.slice(0, 2).toUpperCase()}
       </div>
       <div className="min-w-[130px]">
-        <div className="text-sm font-medium">{entry.name}</div>
+        <div className="text-sm font-medium">{item.full_name}</div>
         <div className="font-mono-pa text-xs" style={{ color: "var(--pa-muted)" }}>
-          {entry.time}
+          {item.student_code} • {item.check_in_time || "N/A"}
         </div>
       </div>
 
-      {hasAIResult ? (
+      {hasVerdict ? (
         <>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px]" style={{ color: "var(--pa-muted)" }}>
               AI Confidence
             </span>
-            <ConfidenceBar value={aiResult!.confidence} verdict={aiResult!.verdict} />
+            <ConfidenceBar value={item.ai_confidence || 0} />
           </div>
           <div className="hidden items-center gap-1.5 font-mono-pa text-[11px] md:flex">
-            {["QR", "Time", `GPS ${entry.gps}m`].map((t) => (
-              <span
-                key={t}
-                className="rounded px-2 py-1"
-                style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
-              >
-                {t}
-              </span>
-            ))}
+            <span
+              className="rounded px-2 py-1"
+              style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
+            >
+              GPS {Math.round(item.gps_distance)}m
+            </span>
           </div>
           <span
             className="whitespace-nowrap rounded-md px-2.5 py-1 font-mono-pa text-[11px] font-semibold tracking-wide"
-            style={{ background: verdictMeta[aiResult!.verdict].bg, color: verdictMeta[aiResult!.verdict].color, border: `1px solid ${verdictMeta[aiResult!.verdict].border}` }}
+            style={{ background: verdict.bg, color: verdict.color, border: `1px solid ${verdict.border}` }}
           >
-            {verdictMeta[aiResult!.verdict].glyph} {verdictMeta[aiResult!.verdict].label}
+            {verdict.glyph} {verdict.label}
           </span>
         </>
       ) : (
         <>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px]" style={{ color: "var(--pa-muted)" }}>
-              Evidence collected
+              Processing...
             </span>
-          </div>
-          <div className="hidden items-center gap-1.5 font-mono-pa text-[11px] md:flex">
-            {["QR", "Time", `GPS ${entry.gps}m`].map((t) => (
-              <span
-                key={t}
-                className="rounded px-2 py-1"
-                style={{ background: "var(--pa-field)", color: "var(--pa-muted)" }}
-              >
-                {t}
-              </span>
-            ))}
           </div>
           <span
             className="whitespace-nowrap rounded-md px-2.5 py-1 font-mono-pa text-[11px] font-semibold tracking-wide"
@@ -135,70 +131,45 @@ function StreamRow({ entry, aiResult }: { entry: StreamEntry; aiResult?: { verdi
 }
 
 export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) => void }) {
-  const [evidenceDone, setEvidenceDone] = useState(false)
-  const [processed, setProcessed] = useState(0)
-  const [aiResults, setAiResults] = useState<Record<string, { verdict: Verdict; confidence: number; reason: string }>>({})
-  const [isLoadingAI, setIsLoadingAI] = useState(false)
-  const [showAIResults, setShowAIResults] = useState(false)
+  const [attendance, setAttendance] = useState<AttendanceListItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null)
+  const [summary, setSummary] = useState({ total: 0, confirmed: 0, verify: 0, suspicious: 0 })
 
+  // Lấy session ID từ localStorage (được set khi generate QR)
   useEffect(() => {
-    const t1 = setTimeout(() => setEvidenceDone(true), 2600)
-    const timers = verificationStream.map((_, i) =>
-      setTimeout(() => setProcessed(i + 1), 3200 + i * 700),
-    )
-    return () => {
-      clearTimeout(t1)
-      timers.forEach(clearTimeout)
+    const sessionId = localStorage.getItem("active_session_id")
+    if (sessionId) {
+      setLastSessionId(sessionId)
     }
+    setIsLoading(false)
   }, [])
 
-  // Gọi AI để verify một student
-  async function verifyWithAI(entry: StreamEntry) {
-    try {
-      const res = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          time: entry.time,
-          gps: entry.gps,
-          deviceMatched: true,
-          tokenValid: true
-        })
-      })
-      const data = await res.json()
-      return {
-        verdict: data.verdict as Verdict,
-        confidence: data.confidence,
-        reason: data.reason || ""
-      }
-    } catch (error) {
-      console.error("AI verification failed:", error)
-      // Fallback to mock calculation instead of using entry's mock verdict
-      const fallbackConfidence = entry.gps < 50 ? 95 : entry.gps < 100 ? 65 : 20
-      const fallbackVerdict = entry.gps < 50 ? "confirmed" : entry.gps < 100 ? "verify" : "suspicious"
-      return {
-        verdict: fallbackVerdict as Verdict,
-        confidence: fallbackConfidence,
-        reason: "Fallback (API unavailable)"
+  // Poll attendance data
+  useEffect(() => {
+    if (!lastSessionId) return
+
+    const fetchAttendance = async () => {
+      try {
+        const data = await getSessionAttendance(lastSessionId)
+        setAttendance(data.attendance || [])
+
+        // Calculate summary
+        const total = data.attendance?.length || 0
+        const confirmed = data.attendance?.filter(a => a.status === "CONFIRMED").length || 0
+        const verify = data.attendance?.filter(a => a.status === "VERIFY").length || 0
+        const suspicious = data.attendance?.filter(a => a.status === "SUSPICIOUS").length || 0
+        setSummary({ total, confirmed, verify, suspicious })
+      } catch (error) {
+        console.error("Failed to fetch attendance:", error)
       }
     }
-  }
 
-  // Gọi AI cho tất cả students
-  async function runAIVerification() {
-    setIsLoadingAI(true)
-    setShowAIResults(false)
-    const results: Record<string, { verdict: Verdict; confidence: number; reason: string }> = {}
+    fetchAttendance()
+    const interval = setInterval(fetchAttendance, 3000) // Poll every 3s
 
-    for (const entry of verificationStream) {
-      results[entry.name] = await verifyWithAI(entry)
-      // Update state để hiển thị từng kết quả
-      setAiResults({ ...results })
-    }
-
-    setIsLoadingAI(false)
-    setShowAIResults(true)
-  }
+    return () => clearInterval(interval)
+  }, [lastSessionId])
 
   const evidenceItems = [
     { label: "Timestamp", value: "±8s" },
@@ -216,22 +187,14 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
         <div>
           <h1 className="text-2xl font-semibold">AI Verification Pipeline</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--pa-muted)" }}>
-            Automatic evidence collection and AI presence evaluation
+            Real-time attendance verification from students
           </p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={runAIVerification}
-            disabled={isLoadingAI || !evidenceDone}
-            className="rounded-lg px-4 py-2.5 text-sm font-medium"
-            style={{
-              background: isLoadingAI ? "var(--pa-muted)" : "var(--pa-accent)",
-              color: "white",
-              opacity: (!evidenceDone) ? 0.5 : 1
-            }}
-          >
-            {isLoadingAI ? "AI Processing..." : "🚀 Run AI Verification"}
-          </button>
+          <div className="flex items-center gap-2 rounded-lg px-4 py-2" style={{ background: "var(--pa-field)" }}>
+            <span className="text-sm" style={{ color: "var(--pa-muted)" }}>Total:</span>
+            <span className="font-mono-pa font-bold" style={{ color: "var(--pa-emerald)" }}>{summary.total}</span>
+          </div>
           <button
             onClick={() => onNavigate("attendance")}
             className="rounded-lg px-4 py-2.5 text-sm font-medium text-white"
@@ -266,43 +229,25 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
           </div>
 
           {/* Stage 2 */}
-          <div
-            className="rounded-xl p-4"
-            style={{
-              background: "var(--pa-panel)",
-              border: `1px solid ${evidenceDone ? "rgba(52,211,153,0.25)" : "var(--pa-border)"}`,
-            }}
-          >
+          <div className="rounded-xl p-4" style={{ background: "var(--pa-panel)", border: "1px solid rgba(52,211,153,0.25)" }}>
             <div className="mb-3 flex items-center gap-3">
-              <StageBadge done={evidenceDone} index={2} />
-              <span className="font-medium" style={{ color: evidenceDone ? "var(--pa-emerald)" : "var(--pa-text)" }}>
+              <StageBadge done index={2} />
+              <span className="font-medium" style={{ color: "var(--pa-emerald)" }}>
                 Evidence Collection
               </span>
-              {!evidenceDone && (
-                <span className="font-mono-pa ml-auto text-xs" style={{ color: "var(--pa-accent-soft)" }}>
-                  Processing…
-                </span>
-              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {evidenceItems.map((it) => (
-                <SubItem key={it.label} label={it.label} value={it.value} done={evidenceDone} />
+                <SubItem key={it.label} label={it.label} value={it.value} done />
               ))}
             </div>
           </div>
 
           {/* Stage 3 */}
-          <div
-            className="rounded-xl p-4"
-            style={{
-              background: "var(--pa-panel)",
-              border: `1px solid ${evidenceDone ? "rgba(52,211,153,0.25)" : "var(--pa-border-soft)"}`,
-              opacity: evidenceDone ? 1 : 0.5,
-            }}
-          >
+          <div className="rounded-xl p-4" style={{ background: "var(--pa-panel)", border: "1px solid rgba(52,211,153,0.25)" }}>
             <div className="mb-3 flex items-center gap-3">
-              <StageBadge done={evidenceDone} index={3} />
-              <span className="font-medium" style={{ color: evidenceDone ? "var(--pa-emerald)" : "var(--pa-muted)" }}>
+              <StageBadge done index={3} />
+              <span className="font-medium" style={{ color: "var(--pa-emerald)" }}>
                 AI Evaluation
               </span>
             </div>
@@ -311,7 +256,7 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
                 <div key={l} className="flex items-center gap-2 text-[13px]" style={{ color: "var(--pa-muted)" }}>
                   <span
                     className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: evidenceDone ? "var(--pa-emerald)" : "var(--pa-dim)" }}
+                    style={{ background: "var(--pa-emerald)" }}
                   />
                   {l}
                 </div>
@@ -319,31 +264,24 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
             </div>
           </div>
 
-          {/* Legend */}
+          {/* Summary */}
           <div className="rounded-xl p-4" style={{ background: "var(--pa-panel)", border: "1px solid var(--pa-border-soft)" }}>
             <div className="font-mono-pa mb-3 text-[11px] tracking-[0.18em]" style={{ color: "var(--pa-muted)" }}>
-              VERDICT LEGEND
+              CURRENT SUMMARY
             </div>
             <div className="flex flex-col gap-2">
-              {(["confirmed", "verify", "suspicious"] as const).map((v) => {
-                const meta = verdictMeta[v]
-                const range =
-                  v === "confirmed" ? "Conf. ≥ 85%" : v === "verify" ? "Conf. 40–84%" : "Conf. < 40%"
-                return (
-                  <div
-                    key={v}
-                    className="flex items-center justify-between rounded-lg px-3 py-2"
-                    style={{ background: meta.bg, border: `1px solid ${meta.border}` }}
-                  >
-                    <span className="flex items-center gap-2 text-sm font-medium" style={{ color: meta.color }}>
-                      {meta.glyph} {v === "confirmed" ? "Confirmed" : v === "verify" ? "Verify" : "Suspicious"}
-                    </span>
-                    <span className="font-mono-pa text-xs" style={{ color: "var(--pa-muted)" }}>
-                      {range}
-                    </span>
-                  </div>
-                )
-              })}
+              <div className="flex items-center justify-between">
+                <span className="text-sm" style={{ color: "var(--pa-emerald)" }}>✓ Confirmed</span>
+                <span className="font-mono-pa font-bold" style={{ color: "var(--pa-emerald)" }}>{summary.confirmed}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm" style={{ color: "var(--pa-amber)" }}>⚠ Verify</span>
+                <span className="font-mono-pa font-bold" style={{ color: "var(--pa-amber)" }}>{summary.verify}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm" style={{ color: "var(--pa-rose)" }}>✗ Suspicious</span>
+                <span className="font-mono-pa font-bold" style={{ color: "var(--pa-rose)" }}>{summary.suspicious}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -351,26 +289,23 @@ export function VerificationScreen({ onNavigate }: { onNavigate: (id: ScreenId) 
         {/* stream column */}
         <div>
           <div className="font-mono-pa mb-3 text-[12px] tracking-[0.15em]" style={{ color: "var(--pa-muted)" }}>
-            {showAIResults ? "AI VERIFICATION RESULTS" : "LIVE VERIFICATION STREAM"} — {processed} PROCESSED
+            LIVE VERIFICATION STREAM — {attendance.length} CHECK-INS
           </div>
-          {processed === 0 ? (
-            <div
-              className="flex items-center gap-2 rounded-xl px-4 py-4 text-sm"
-              style={{ background: "var(--pa-panel)", border: "1px solid var(--pa-border-soft)", color: "var(--pa-muted)" }}
-            >
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-4 text-sm" style={{ background: "var(--pa-panel)", border: "1px solid var(--pa-border-soft)", color: "var(--pa-muted)" }}>
               <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--pa-accent-soft)" }} />
-              Awaiting scans…
+              Loading...
             </div>
-          ) : !showAIResults ? (
-            <div className="flex flex-col gap-3">
-              {verificationStream.slice(0, processed).map((e) => (
-                <StreamRow key={e.name} entry={e} />
-              ))}
+          ) : attendance.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-4 text-sm" style={{ background: "var(--pa-panel)", border: "1px solid var(--pa-border-soft)", color: "var(--pa-muted)" }}>
+              <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--pa-accent-soft)" }} />
+              Awaiting check-ins...
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {verificationStream.slice(0, processed).map((e) => (
-                <StreamRow key={e.name} entry={e} aiResult={aiResults[e.name]} />
+              {attendance.map((item) => (
+                <AttendanceRow key={item.attendance_id} item={item} />
               ))}
             </div>
           )}

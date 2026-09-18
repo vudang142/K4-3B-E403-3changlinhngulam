@@ -13,7 +13,8 @@ class AIService:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.model = "openai/gpt-oss-20b"
+        # Groq models: llama-3.3-70b-versatile, llama-3.1-70b-versatile, mixtral-8x7b-32768, gemma2-9b-it
+        self.model = "llama-3.3-70b-versatile"
 
     async def verify_attendance(self, evidence: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -49,30 +50,24 @@ class AIService:
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are an attendance verification AI.
+                    "content": """You are a strict attendance verification AI. You MUST follow these rules EXACTLY:
 
-Analyze the attendance evidence. Determine whether the evidence is consistent with the student being physically present in the classroom.
+STRICT RULES:
+1. GPS < 50m → CONFIRMED
+2. GPS 50-100m → VERIFY
+3. GPS > 100m → SUSPICIOUS
 
-Consider ALL signals together:
-- GPS distance: how reasonable is this distance?
-- QR validity: expired/invalid tokens suggest suspicious behavior
-- Check-in timing: consistent with session start?
-- Overall pattern: do all signals align?
+The GPS distance is the PRIMARY factor. Follow the rules above EXACTLY, no exceptions.
 
-IMPORTANT RULES:
-1. GPS < 50m with all other signals OK → CONFIRMED
-2. GPS 50-100m OR one weak signal → VERIFY
-3. GPS > 100m OR invalid QR OR no device match → SUSPICIOUS
-
-Return ONLY valid JSON, no markdown:
-{"status": "CONFIRMED|VERIFY|SUSPICIOUS", "confidence": 0-100, "reasoning": "...", "uncertainty": ["..."]}"""
+Return ONLY valid JSON, no markdown, no explanation:
+{"status": "CONFIRMED", "confidence": 95, "reasoning": "GPS distance is within acceptable range", "uncertainty": []}"""
                 },
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            "temperature": 0.1,
+            "temperature": 0.0,
             "response_format": {"type": "json_object"}
         }
 

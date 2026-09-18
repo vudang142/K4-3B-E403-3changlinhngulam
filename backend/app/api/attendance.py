@@ -107,14 +107,20 @@ async def check_in(request: CheckInRequest):
                 message=f"Student {request.student_code} already checked in"
             )
 
-    # Calculate GPS distance (assuming classroom coordinates)
-    # Default classroom coordinates (E403 approximate)
-    classroom_lat = 21.0072
-    classroom_lon = 105.8454
-    distance_to_room = gps_service.calculate_distance(
+    # Calculate GPS distance from classroom using OSRM routing
+    # VINUNI E403 coordinates: 20.989251° N, 105.943573° E
+    classroom_lat = 20.989251
+    classroom_lon = 105.943573
+    distance_to_room, routing_info = await gps_service.get_walking_distance(
         request.latitude, request.longitude,
         classroom_lat, classroom_lon
     )
+
+    # Log routing info for debugging
+    if routing_info:
+        print(f"Routing: {routing_info['distance']}m (road) vs {routing_info['straight_line']}m (straight)")
+    else:
+        print(f"Using straight-line distance: {distance_to_room}m")
 
     # Prepare evidence for AI
     check_in_time = datetime.now().strftime("%H:%M:%S")
@@ -126,7 +132,8 @@ async def check_in(request: CheckInRequest):
         "gps_accuracy": request.gps_accuracy,
         "qr_valid": True,
         "check_in_time": check_in_time,
-        "session_start": session_start
+        "session_start": session_start,
+        "is_routing_distance": routing_info is not None
     }
 
     # Call AI

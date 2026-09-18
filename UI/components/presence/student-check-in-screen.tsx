@@ -228,54 +228,63 @@ export function StudentCheckInScreen({ sessionId, qrToken }: { sessionId?: strin
   }, [tokenStatus, sessionExpiredAt])
 
   function requestGPS() {
+    console.log("GPS: Requesting location...")
     setGpsError("")
     setGpsStatus("requesting")
 
-    if (!("geolocation" in navigator)) {
+    if (!navigator.geolocation) {
       setGpsStatus("error")
       setGpsError("Thiết bị không hỗ trợ GPS.")
       return
     }
 
-    // Use watchPosition for continuous updates, then getCurrentPosition behavior
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current)
+    const handleSuccess = (position: GeolocationPosition) => {
+      console.log("GPS: Success", position.coords.latitude, position.coords.longitude)
+      setGpsLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy
+      })
+      setGpsStatus("ready")
+      setGpsError("")
     }
 
-    // Get high accuracy position with timeout
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setGpsLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy
-        })
-        setGpsStatus("ready")
-        setGpsError("")
-      },
-      (error) => {
-        setGpsLocation(null)
-        setGpsStatus("error")
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setGpsError("Quyền truy cập vị trí bị từ chối. Vui lòng cho phép truy cập vị trí trong cài đặt trình duyệt.")
-            break
-          case error.POSITION_UNAVAILABLE:
-            setGpsError("Không tìm thấy vị trí. Thử lại hoặc kiểm tra GPS thiết bị.")
-            break
-          case error.TIMEOUT:
-            setGpsError("Hết thời gian chờ. Vui lòng thử lại.")
-            break
-          default:
-            setGpsError("Không thể xác định vị trí. Vui lòng thử lại.")
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+    const handleError = (error: GeolocationPositionError) => {
+  console.error("GPS ERROR:", {
+    code: error.code,
+    message: error.message,
+    PERMISSION_DENIED: error.PERMISSION_DENIED,
+    POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+    TIMEOUT: error.TIMEOUT,
+  })
+
+  setGpsLocation(null)
+  setGpsStatus("error")
+
+  if (error.code === 1) {
+    setGpsError(
+      `GPS error code 1 (PERMISSION_DENIED): ${error.message}`
     )
+  } else if (error.code === 2) {
+    setGpsError(
+      `GPS error code 2 (POSITION_UNAVAILABLE): ${error.message}`
+    )
+  } else if (error.code === 3) {
+    setGpsError(
+      `GPS error code 3 (TIMEOUT): ${error.message}`
+    )
+  } else {
+    setGpsError(
+      `GPS error code ${error.code}: ${error.message}`
+    )
+  }
+}
+
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 0
+    })
   }
 
   async function submitCheckIn(event: FormEvent<HTMLFormElement>) {
